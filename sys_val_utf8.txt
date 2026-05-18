@@ -1,0 +1,249 @@
+﻿System Validation & Profiling Framework Documentation
+1. Project Overview
+This project is designed to automate the execution, validation, profiling, and reporting of different infrastructure and platform-related modules across multiple environments such as Linux, Windows, ARM, Cloud, GPU Nodes, and GPU Clusters.
+The framework supports:
+Platform Profiling 
+Workload Profiling 
+Meta Collection 
+Capacity Sizing 
+Validation of Nested Keys 
+Execution with and without sudo 
+ZIP/UNZIP handling 
+HTML Reporting 
+Automated Test Case Validation 
+The framework is fully argument-driven using Python argparse and supports scalable execution across multiple servers and environments.
+2. Folder Structure
+3. Module Descriptions
+3.1 Platform Profiler (PP)
+The Platform Profiler module is responsible for collecting and validating platform-level information from different operating systems and infrastructures.
+Supported Environments:
+Linux (All Distros) 
+Windows (Different Architectures) 
+ARM Systems 
+Cloud Platforms (AWS, Azure, GCP) 
+GPU Nodes 
+GPU Clusters 
+Responsibilities:
+OS profiling 
+Hardware information collection 
+BIOS details 
+System architecture validation 
+Platform capability checks 
+4. Configuration File
+File
+:
+ 
+config.ini
+This configuration file stores all endpoint URLs required for testing and execution.
+Example Structure:
+[platform_profile
+r
+]
+linux=https://linux-url
+windows=https://windows-url
+arm=https://arm-url
+cloud=https://cloud-url
+gpu_nodes=https://gpu-node-url
+gpu_clusters=https://gpu-cluster-url
+[workload_profiler]
+linux=https://linux-url
+windows=https://windows-url
+arm=https://arm-url
+cloud=https://cloud-url
+gpu_nodes=https://gpu-node-url
+gpu_clusters=https://gpu-cluster-url
+[meta_collector]
+linux=https://linux-url
+windows=https://windows-url
+arm=https://arm-url
+cloud=https://cloud-url
+gpu_nodes=https://gpu-node-url
+gpu_clusters=https://gpu-cluster-url
+[capacity_sizer]
+linux=https://linux-url
+windows=https://windows-url
+arm=https://arm-url
+cloud=https://cloud-url
+gpu_nodes=https://gpu-node-url
+gpu_clusters=https://gpu-cluster-url
+Purpose:
+Centralized URL management 
+Easy switching between environments 
+Dynamic execution configuration
+5. Server Details File
+File: server_details.ini
+This file stores authentication and connectivity information for all servers.
+Example Structure:
+[linux]
+user=username
+password=password
+ip=192.168.1.10
+[windows]
+user=username
+password=password
+ip=192.168.1.11
+[arm]
+user=username
+password=password
+ip=192.168.1.12
+[gpu_cluster]
+user=username
+password=password
+ip=192.168.1.13
+Purpose:
+SSH connectivity 
+Remote execution 
+Credential management 
+Multi-server support
+6. Main Entry Point
+File: main.py
+main.py acts as the primary execution entry point for the entire framework.
+Execution is fully controlled using command-line arguments through Python argparse.
+7. Supported Command-Line Arguments
+Short Arguments
+Argument
+Description
+-pp
+Platform Profiler
+-wp
+Workload Profiler
+-mc
+Meta Collector
+-cs
+Capacity Sizer
+-all
+Execute All Modules
+Help Commands
+Short Help
+python main.py -h
+Displays:
+-pp
+-wp
+-mc
+-cs
+-all
+Detailed Help
+python main.py --help
+Displays:
+-platform profiler
+-workload profiler
+-meta collector
+-capacity sizer
+-all modules
+8. Key Validation Feature
+The framework supports validation of deeply nested keys inside JSON payloads.
+Example JSON:
+{
+  "chassis": {
+    "systems": {
+      "bios": {
+        "version": "1.0"
+     
+ 
+#suppose this is newly added
+      }
+    }
+  }
+}
+Key Input Format:
+[chassis.systems.bios.version]
+Supported Features:
+Single key validation 
+Multiple key validation 
+Nested dictionary traversal 
+Null value validation 
+Missing key validation 
+Validation Output:
+Key Present 
+Key Missing 
+Key Value is Null 
+Example Messages:
+[PASS] Key found: chassis.systems.bios.version
+[FAIL] Key missing: chassis.systems.bios.version
+[FAIL] Key exists but value is null
+9. Sudo and Non-Sudo Execution
+The framework supports both:
+Execution with sudo 
+Execution without sudo 
+Purpose:
+Privileged command validation 
+Non-privileged environment testing 
+Security validation 
+Output directories are separated accordingly.
+Example:
+outputs/platform_profiler/linux/with_sudo/
+outputs/platform_profiler/linux/without_sudo/
+10. Output Management
+All execution outputs are stored in structured directories.
+Output Categories:
+Platform Profiler Outputs 
+Workload Profiler Outputs 
+Meta Collector Outputs 
+Capacity Sizer Outputs 
+Environment Categories:
+Linux 
+Windows 
+ARM 
+Cloud 
+GPU Nodes 
+GPU Clusters 
+Execution Modes:
+With Sudo 
+Without Sudo 
+11. ZIP and UNZIP Handling
+The framework supports:
+Automatic ZIP creation 
+Output compression 
+ZIP extraction 
+Archive validation 
+Purpose:
+Reduce storage usage 
+Easy transfer of outputs 
+Backup management 
+Supported Operations:
+Create ZIP 
+Extract ZIP 
+Validate ZIP contents 
+Read outputs from ZIP archives 
+12. Test Case Validation
+A dedicated test_cases module is included for validating all functionalities.
+Test Coverage:
+Argument validation 
+URL validation 
+Server credential validation 
+Key validation 
+JSON traversal 
+ZIP/UNZIP validation 
+Output validation 
+HTML report validation 
+Purpose:
+Ensure reliability 
+Preventing
+ failures 
+Improve maintainability 
+13. HTML Reporting System
+The framework generates detailed HTML reports after execution.
+Features:
+Execution summary 
+Pass/Fail statistics 
+Environment-wise results 
+Failure reasons 
+Validation details 
+Timestamp tracking 
+Example:
+Linux Servers:
+Total Servers: 10
+Passed: 9
+Failed: 1
+Failure Details Example:
+Server IP: 192.168.1.20
+Failure Reason:
+- BIOS key missing
+- SSH authentication failed
+- URL unreachable
+Report Sections:
+Summary Dashboard 
+Environment Results 
+Validation Logs 
+Error Reports 
+Execution Metrics

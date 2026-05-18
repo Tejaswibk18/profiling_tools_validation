@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environment
+myenv/
+venv/
+ENV/
+
+# Project Specific
+outputs/
+reports/
+
+# Sensitive Data (Credentials)
+server_details.ini
+
+# IDEs
+.vscode/
+.idea/

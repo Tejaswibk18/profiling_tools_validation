@@ -13,54 +13,51 @@ from services.output_service import (
 SERVER_CONFIG = "server_details.ini"
 
 
-def get_profile_url():
+def get_profile_url(module_key, os_name):
     config = load_config()
 
+    # Map module_key to section name in config.ini
+    section_map = {
+        "pp": "platform_profiler",
+        "wp": "workload_profiler"
+    }
+    section = section_map.get(module_key, "platform_profiler")
+
     return config.get(
-        "linux",
-        "profile_url"
+        section,
+        os_name,
+        fallback="https://dummyjson.com/users"
     )
 
 
-def load_server_details():
+def load_server_details(os_name):
 
     config = configparser.ConfigParser()
 
     config.read(SERVER_CONFIG)
 
-    required_keys = (
-        "ip",
-        "username",
-        "ssh_key"
-    )
-
-    missing = [
-        key for key in required_keys
-        if not config.has_option("linux", key)
-    ]
-
-    if missing:
-        raise ValueError(
-            f"Missing config keys : {', '.join(missing)}"
-        )
+    if not config.has_section(os_name):
+        raise ValueError(f"Missing config section: [{os_name}]")
 
     return {
-        "host": config.get("linux", "ip"),
-        "username": config.get("linux", "username"),
-        "key_path": config.get("linux", "ssh_key")
+        "host": config.get(os_name, "ip", fallback=config.get(os_name, "host", fallback="")),
+        "username": config.get(os_name, "username", fallback=config.get(os_name, "user", fallback="")),
+        "password": config.get(os_name, "password", fallback=None),
+        "key_path": config.get(os_name, "ssh_key", fallback=None)
     }
 
 
-def fetch_json():
+def fetch_json(module_key, os_name):
 
     response = requests.get(
-        get_profile_url(),
+        get_profile_url(module_key, os_name),
         timeout=10
     )
 
     response.raise_for_status()
 
     return response.json()
+
 
 
 def extract_nested_value(data, keys):
@@ -176,9 +173,9 @@ def execute_command(
 
 
 
-def connect_linux_server(keys):
+def connect_to_server(keys, module_key, os_name):
 
-    server = load_server_details()
+    server = load_server_details(os_name)
 
     ssh = paramiko.SSHClient()
 
@@ -188,41 +185,81 @@ def connect_linux_server(keys):
 
     try:
 
-        ssh.connect(
-            hostname=server["host"],
-            username=server["username"],
-            key_filename=server["key_path"]
-        )
+        connect_args = {
+            "hostname": server["host"],
+            "username": server["username"]
+        }
+        if server.get("key_path"):
+            connect_args["key_filename"] = server["key_path"]
+        elif server.get("password"):
+            connect_args["password"] = server["password"]
+
+        ssh.connect(**connect_args)
 
         print(
-            "\n[INFO] SSH Connection Successful"
+            f"\n[INFO] SSH Connection Successful to {os_name.upper()}"
         )
 
-        output_paths = create_output_folders()
+        output_paths = create_output_folders(module_key, os_name)
 
+        # 2. Create a folder
+        folder_name = "profiler_test_dir"
+        mkdir_cmd = f"mkdir -p {folder_name}" if os_name != "windows" else f"mkdir {folder_name}"
+        _, stdout, _ = ssh.exec_command(mkdir_cmd)
+        stdout.read() # Wait for completion
+        
+        profile_url = get_profile_url(module_key, os_name)
+        
+        # 3. Download the tool
+        if os_name == "windows":
+            download_cmd = f'powershell -Command "Invoke-WebRequest -Uri {profile_url} -OutFile {folder_name}\downloaded_tool.txt"'
+        else:
+            download_cmd = f'wget -O {folder_name}/downloaded_tool.txt {profile_url}'
+            
+        _, stdout, _ = ssh.exec_command(download_cmd)
+        stdout.read() # Wait for completion
+        
+        # 4. Run the tool (Simulated by running uname/systeminfo and saving to results.txt)
+        if os_name == "windows":
+            run_cmd = f"systeminfo > {folder_name}\\results.txt"
+        else:
+            run_cmd = f"uname -a > {folder_name}/results.txt"
+            
+        _, stdout, _ = ssh.exec_command(run_cmd)
+        stdout.read() # Wait for completion
+        
+        # 5. Copy the results back
+        if os_name == "windows":
+            copy_cmd = f"type {folder_name}\\results.txt"
+        else:
+            copy_cmd = f"cat {folder_name}/results.txt"
+            
         execute_command(
             ssh,
-            "uname -a",
+            copy_cmd,
             output_paths["non_sudo"],
-            "linux_details.txt"
+            f"{os_name}_details.txt"
         )
-
-        print(
-            "[INFO] Non-Sudo Data Collected Successfully"
-        )
+        print("[INFO] Non-Sudo Data Collected Successfully")
 
         execute_command(
             ssh,
-            "sudo uname -a",
+            copy_cmd,
             output_paths["sudo"],
-            "linux_details.txt"
+            f"{os_name}_details.txt"
         )
+        print("[INFO] Sudo Data Collected Successfully")
 
-        print(
-            "[INFO] Sudo Data Collected Successfully"
-        )
+        # 6. Delete the folder that we created
+        if os_name == "windows":
+            delete_cmd = f"rmdir /s /q {folder_name}"
+        else:
+            delete_cmd = f"rm -rf {folder_name}"
+            
+        _, stdout, _ = ssh.exec_command(delete_cmd)
+        stdout.read() # Wait for completion
 
-        data = fetch_json()
+        data = fetch_json(module_key, os_name)
 
         print(
             "[INFO] JSON Data Collected Successfully"

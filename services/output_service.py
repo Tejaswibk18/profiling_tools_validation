@@ -1,16 +1,15 @@
 from pathlib import Path
 
 
-BASE_OUTPUT = Path(
-    "outputs/pp/linux"
-)
+def create_output_folders(module_key, os_name):
 
-
-def create_output_folders():
+    base_output = Path(
+        f"outputs/{module_key}/{os_name}"
+    )
 
     paths = {
-        "sudo": BASE_OUTPUT / "with_sudo",
-        "non_sudo": BASE_OUTPUT / "without_sudo"
+        "sudo": base_output / "with_sudo",
+        "non_sudo": base_output / "without_sudo"
     }
 
     for path in paths.values():
