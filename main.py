@@ -120,11 +120,97 @@ def main():
                     except Exception as exc:
                         print(f"\n[ERROR] {module_name} for {os_name.upper()} failed: {exc}")
 
-            # New Step: Unzip and Validate Keys (Only for Platform Profiler)
+            # Post-execution cleanup: Unzip files and delete redundant archives
+            import os
+            import zipfile
+            import json
+            import shutil
+            
+            for os_name in configured_oses:
+                for mode in ["without_sudo", "with_sudo"]:
+                    local_dir = f"outputs/{module_key}/{os_name}/{mode}"
+                    zip_path = os.path.join(local_dir, f"{os_name}_results.zip")
+                    
+                    if os.path.exists(zip_path):
+                        extract_dir = os.path.join(local_dir, f"{os_name}_extracted")
+                        try:
+                            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                                zip_ref.extractall(extract_dir)
+                            
+                            # Move all files directly to local_dir
+                            for root, dirs, files in os.walk(extract_dir):
+                                for f in files:
+                                    src_path = os.path.join(root, f)
+                                    dst_path = os.path.join(local_dir, f)
+                                    # Overwrite if exists, or just move
+                                    if os.path.exists(dst_path):
+                                        os.remove(dst_path)
+                                    shutil.move(src_path, dst_path)
+                            
+                            # Clean up zip and temp extract dir
+                            shutil.rmtree(extract_dir)
+                            os.remove(zip_path)
+                            print(f"[INFO] Extracted results to {local_dir} and cleaned up archive.")
+                            
+                            # Parse results.txt or details text into nested JSON
+                            results_txt_path = os.path.join(local_dir, "results.txt")
+                            details_txt_path = os.path.join(local_dir, f"{os_name}_details.txt")
+                            src_text_file = results_txt_path if os.path.exists(results_txt_path) else (details_txt_path if os.path.exists(details_txt_path) else None)
+                            
+                            if src_text_file:
+                                try:
+                                    with open(src_text_file, "r", encoding="utf-8") as rf:
+                                        content = rf.read().strip()
+                                        
+                                    parsed_data = {}
+                                    for line in content.splitlines():
+                                        line = line.strip()
+                                        if not line or line.startswith('#') or line.startswith('//'):
+                                            continue
+                                            
+                                        sep = '=' if '=' in line else (':' if ':' in line else None)
+                                        if sep:
+                                            k_part, v_part = line.split(sep, 1)
+                                            k_part = k_part.strip().strip('[]')
+                                            v_part = v_part.strip().strip('"\'')
+                                            
+                                            parts = k_part.split('.')
+                                            curr = parsed_data
+                                            for part in parts[:-1]:
+                                                part = part.strip()
+                                                if part not in curr or not isinstance(curr[part], dict):
+                                                    curr[part] = {}
+                                                curr = curr[part]
+                                                
+                                            val_lower = v_part.lower()
+                                            if val_lower == "true":
+                                                val = True
+                                            elif val_lower == "false":
+                                                val = False
+                                            elif val_lower in ("null", "none"):
+                                                val = None
+                                            else:
+                                                try:
+                                                    val = float(v_part) if '.' in v_part else int(v_part)
+                                                except ValueError:
+                                                    val = v_part
+                                                    
+                                            curr[parts[-1].strip()] = val
+                                            
+                                    json_out_path = os.path.join(local_dir, "results.json")
+                                    pp_json_out_path = os.path.join(local_dir, "platformprofiler.json")
+                                    with open(json_out_path, "w", encoding="utf-8") as jf:
+                                        json.dump(parsed_data, jf, indent=4)
+                                    with open(pp_json_out_path, "w", encoding="utf-8") as jf:
+                                        json.dump(parsed_data, jf, indent=4)
+                                    print(f"[INFO] Successfully converted output text to JSON: {pp_json_out_path}")
+                                except Exception as json_err:
+                                    print(f"[ERROR] Failed to convert results to JSON: {json_err}")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to extract archive for {os_name.upper()} ({mode}): {e}")
+
+            # New Step: Ask for keys and Validate (Only for Platform Profiler)
             if module_key == "pp":
-                import os
-                import zipfile
-                import json
                 from services.ssh_service import validate_keys
                 
                 keys_input = input("\nEnter key(s) to check in JSON (comma separated if multiple): ")
@@ -134,49 +220,36 @@ def main():
                     for os_name in configured_oses:
                         for mode in ["without_sudo", "with_sudo"]:
                             local_dir = f"outputs/{module_key}/{os_name}/{mode}"
-                            zip_path = os.path.join(local_dir, f"{os_name}_results.zip")
                             
-                            if os.path.exists(zip_path):
-                                extract_dir = os.path.join(local_dir, f"{os_name}_extracted")
+                            # Find the JSON file directly in local_dir
+                            json_file = None
+                            if os.path.exists(local_dir):
+                                for f in os.listdir(local_dir):
+                                    if f.endswith('.json'):
+                                        json_file = os.path.join(local_dir, f)
+                                        break
+                                        
+                            if json_file:
                                 try:
-                                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                                        zip_ref.extractall(extract_dir)
+                                    with open(json_file, 'r') as jf:
+                                        data = json.load(jf)
                                     
-                                    # Find the JSON file
-                                    json_file = None
-                                    for root, dirs, files in os.walk(extract_dir):
-                                        for f in files:
-                                            if f.endswith('.json'):
-                                                json_file = os.path.join(root, f)
-                                                break
-                                        if json_file:
-                                            break
-                                            
-                                    if json_file:
-                                        with open(json_file, 'r') as jf:
-                                            data = json.load(jf)
-                                        
-                                        validation_output = validate_keys(data, keys_to_check)
-                                        print(f"\n[INFO] Validation results for {os_name.upper()} ({mode}):")
-                                        print(validation_output)
-                                        
-                                        # Save validation results
-                                        val_out_path = os.path.join(local_dir, "validation_results.txt")
-                                        with open(val_out_path, "w") as f:
-                                            f.write(validation_output)
-                                        print(f"[INFO] Saved validation results to {val_out_path}")
-                                    else:
-                                        print(f"[WARN] No JSON file found in zip for {os_name.upper()} ({mode})")
+                                    validation_output = validate_keys(data, keys_to_check)
+                                    print(f"\n[INFO] Validation results for {os_name.upper()} ({mode}):")
+                                    print(validation_output)
+                                    
+                                    # Save validation results
+                                    val_out_path = os.path.join(local_dir, "validation_results.txt")
+                                    with open(val_out_path, "w") as f:
+                                        f.write(validation_output)
+                                    print(f"[INFO] Saved validation results to {val_out_path}")
                                 except Exception as e:
-                                    print(f"[ERROR] Failed to process zip for {os_name.upper()} ({mode}): {e}")
+                                    print(f"[ERROR] Failed to validate keys for {os_name.upper()} ({mode}): {e}")
                             else:
-                                print(f"[WARN] Zip file not found for {os_name.upper()} ({mode}): {zip_path}")
+                                print(f"[WARN] No JSON file found in {local_dir} to validate keys.")
 
             from services.report_service import generate_html_report
             generate_html_report(module_key)
-
-            from services.zip_service import archive_outputs
-            archive_outputs(module_key)
 
     except KeyboardInterrupt:
         print("\n[INFO] Execution interrupted by user")

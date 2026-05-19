@@ -124,6 +124,9 @@ def run_linux_profiler(ssh, module_key, os_name, output_paths, duration=None, in
             ssh.exec_command(f"{sudo_prefix}rm -rf {folder_name}")
             continue
             
+        # Delete the binary to save transfer size and keep the folder clean
+        run_remote_cmd(f"{sudo_prefix}rm -f {folder_name}/{tool_name}")
+            
         zip_file = f"{folder_name}.zip"
         zip_cmd = f"{sudo_prefix}zip -r {zip_file} {folder_name}"
         
@@ -193,6 +196,9 @@ def run_windows_profiler(ssh, module_key, os_name, output_paths, duration=None, 
             print(f"[ERROR] Failed to run tool on {os_name} for {mode} (Status {status}):\n{err}")
             ssh.exec_command(f"rmdir /s /q {folder_name}")
             continue
+            
+        # Delete the binary to save transfer size and keep the folder clean
+        run_remote_cmd(f"del {folder_name}\\{tool_name}.txt")
             
         zip_file = f"{folder_name}.zip"
         zip_cmd = f'powershell -Command "Compress-Archive -Path {folder_name} -DestinationPath {zip_file}"'
