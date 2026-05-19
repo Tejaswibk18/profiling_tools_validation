@@ -94,12 +94,7 @@ def main():
         module_names = ", ".join([name for _, name in modules_to_run])
         print(f"\n[INFO] Running : {module_names}")
 
-        keys = input(
-            "\nEnter key(s) "
-            "(comma separated if multiple):\n"
-        ).split(",")
-
-        keys = [key.strip() for key in keys if key.strip()]
+        keys = []
 
         config = configparser.ConfigParser()
         config.read("server_details.ini")
@@ -124,6 +119,57 @@ def main():
                         print(f"\n[INFO] Completed {module_name} for OS: {os_name.upper()}")
                     except Exception as exc:
                         print(f"\n[ERROR] {module_name} for {os_name.upper()} failed: {exc}")
+
+            # New Step: Unzip and Validate Keys (Only for Platform Profiler)
+            if module_key == "pp":
+                import os
+                import zipfile
+                import json
+                from services.ssh_service import validate_keys
+                
+                keys_input = input("\nEnter key(s) to check in JSON (comma separated if multiple): ")
+                keys_to_check = [k.strip() for k in keys_input.split(",") if k.strip()]
+                
+                if keys_to_check:
+                    for os_name in configured_oses:
+                        local_dir = f"outputs/{module_key}/{os_name}/without_sudo"
+                        zip_path = os.path.join(local_dir, f"{os_name}_results.zip")
+                        
+                        if os.path.exists(zip_path):
+                            extract_dir = os.path.join(local_dir, f"{os_name}_extracted")
+                            try:
+                                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                                    zip_ref.extractall(extract_dir)
+                                
+                                # Find the JSON file
+                                json_file = None
+                                for root, dirs, files in os.walk(extract_dir):
+                                    for f in files:
+                                        if f.endswith('.json'):
+                                            json_file = os.path.join(root, f)
+                                            break
+                                    if json_file:
+                                        break
+                                        
+                                if json_file:
+                                    with open(json_file, 'r') as jf:
+                                        data = json.load(jf)
+                                    
+                                    validation_output = validate_keys(data, keys_to_check)
+                                    print(f"\n[INFO] Validation results for {os_name.upper()}:")
+                                    print(validation_output)
+                                    
+                                    # Save validation results
+                                    val_out_path = os.path.join(local_dir, "validation_results.txt")
+                                    with open(val_out_path, "w") as f:
+                                        f.write(validation_output)
+                                    print(f"[INFO] Saved validation results to {val_out_path}")
+                                else:
+                                    print(f"[WARN] No JSON file found in zip for {os_name.upper()}")
+                            except Exception as e:
+                                print(f"[ERROR] Failed to process zip for {os_name.upper()}: {e}")
+                        else:
+                            print(f"[WARN] Zip file not found for {os_name.upper()}: {zip_path}")
 
             from services.report_service import generate_html_report
             generate_html_report(module_key)

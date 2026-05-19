@@ -1,4 +1,4 @@
-﻿System Validation & Profiling Framework Documentation
+System Validation & Profiling Framework Documentation
 1. Project Overview
 This project is designed to automate the execution, validation, profiling, and reporting of different infrastructure and platform-related modules across multiple environments such as Linux, Windows, ARM, Cloud, GPU Nodes, and GPU Clusters.
 The framework supports:
