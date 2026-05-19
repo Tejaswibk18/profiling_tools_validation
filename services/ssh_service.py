@@ -121,7 +121,7 @@ def connect_to_server(keys, module_key, os_name, duration=None, interval=None, t
         mkdir_cmd = f"mkdir -p {folder_name}" if os_name != "windows" else f"mkdir {folder_name}"
         status, out, err = run_remote_cmd(mkdir_cmd)
         if status != 0:
-            print(f"[ERROR] Failed to create directory: {err}")
+            raise RuntimeError(f"Failed to create directory: {err}")
             
         profile_url = get_profile_url(module_key, os_name)
         
@@ -134,7 +134,7 @@ def connect_to_server(keys, module_key, os_name, duration=None, interval=None, t
             
         status, out, err = run_remote_cmd(download_cmd)
         if status != 0:
-            print(f"[ERROR] Failed to download tool on {os_name}: {err}")
+            raise RuntimeError(f"Failed to download tool on {os_name}:\n{err}")
             
         if os_name != "windows":
             run_remote_cmd(f"chmod +x {folder_name}/{tool_name}")
@@ -162,7 +162,7 @@ def connect_to_server(keys, module_key, os_name, duration=None, interval=None, t
             
         status, out, err = run_remote_cmd(run_cmd)
         if status != 0:
-            print(f"[ERROR] Failed to run tool on {os_name}: {err}")
+            raise RuntimeError(f"Failed to run tool on {os_name}:\n{err}")
         
         # 5. Make it into zip files ON THE REMOTE SERVER
         zip_file = f"{folder_name}.zip"
