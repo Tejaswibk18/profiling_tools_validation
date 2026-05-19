@@ -132,44 +132,45 @@ def main():
                 
                 if keys_to_check:
                     for os_name in configured_oses:
-                        local_dir = f"outputs/{module_key}/{os_name}/without_sudo"
-                        zip_path = os.path.join(local_dir, f"{os_name}_results.zip")
-                        
-                        if os.path.exists(zip_path):
-                            extract_dir = os.path.join(local_dir, f"{os_name}_extracted")
-                            try:
-                                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                                    zip_ref.extractall(extract_dir)
-                                
-                                # Find the JSON file
-                                json_file = None
-                                for root, dirs, files in os.walk(extract_dir):
-                                    for f in files:
-                                        if f.endswith('.json'):
-                                            json_file = os.path.join(root, f)
+                        for mode in ["without_sudo", "with_sudo"]:
+                            local_dir = f"outputs/{module_key}/{os_name}/{mode}"
+                            zip_path = os.path.join(local_dir, f"{os_name}_results.zip")
+                            
+                            if os.path.exists(zip_path):
+                                extract_dir = os.path.join(local_dir, f"{os_name}_extracted")
+                                try:
+                                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                                        zip_ref.extractall(extract_dir)
+                                    
+                                    # Find the JSON file
+                                    json_file = None
+                                    for root, dirs, files in os.walk(extract_dir):
+                                        for f in files:
+                                            if f.endswith('.json'):
+                                                json_file = os.path.join(root, f)
+                                                break
+                                        if json_file:
                                             break
+                                            
                                     if json_file:
-                                        break
+                                        with open(json_file, 'r') as jf:
+                                            data = json.load(jf)
                                         
-                                if json_file:
-                                    with open(json_file, 'r') as jf:
-                                        data = json.load(jf)
-                                    
-                                    validation_output = validate_keys(data, keys_to_check)
-                                    print(f"\n[INFO] Validation results for {os_name.upper()}:")
-                                    print(validation_output)
-                                    
-                                    # Save validation results
-                                    val_out_path = os.path.join(local_dir, "validation_results.txt")
-                                    with open(val_out_path, "w") as f:
-                                        f.write(validation_output)
-                                    print(f"[INFO] Saved validation results to {val_out_path}")
-                                else:
-                                    print(f"[WARN] No JSON file found in zip for {os_name.upper()}")
-                            except Exception as e:
-                                print(f"[ERROR] Failed to process zip for {os_name.upper()}: {e}")
-                        else:
-                            print(f"[WARN] Zip file not found for {os_name.upper()}: {zip_path}")
+                                        validation_output = validate_keys(data, keys_to_check)
+                                        print(f"\n[INFO] Validation results for {os_name.upper()} ({mode}):")
+                                        print(validation_output)
+                                        
+                                        # Save validation results
+                                        val_out_path = os.path.join(local_dir, "validation_results.txt")
+                                        with open(val_out_path, "w") as f:
+                                            f.write(validation_output)
+                                        print(f"[INFO] Saved validation results to {val_out_path}")
+                                    else:
+                                        print(f"[WARN] No JSON file found in zip for {os_name.upper()} ({mode})")
+                                except Exception as e:
+                                    print(f"[ERROR] Failed to process zip for {os_name.upper()} ({mode}): {e}")
+                            else:
+                                print(f"[WARN] Zip file not found for {os_name.upper()} ({mode}): {zip_path}")
 
             from services.report_service import generate_html_report
             generate_html_report(module_key)
