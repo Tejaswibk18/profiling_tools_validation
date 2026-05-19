@@ -121,7 +121,8 @@ def connect_to_server(keys, module_key, os_name, duration=None, interval=None, t
         mkdir_cmd = f"mkdir -p {folder_name}" if os_name != "windows" else f"mkdir {folder_name}"
         status, out, err = run_remote_cmd(mkdir_cmd)
         if status != 0:
-            raise RuntimeError(f"Failed to create directory: {err}")
+            print(f"[ERROR] Failed to create directory on {os_name}: {err}")
+            return
             
         profile_url = get_profile_url(module_key, os_name)
         
@@ -130,11 +131,13 @@ def connect_to_server(keys, module_key, os_name, duration=None, interval=None, t
         if os_name == "windows":
             download_cmd = f'powershell -Command "Invoke-WebRequest -Uri {profile_url} -OutFile {folder_name}\\{tool_name}.txt"'
         else:
-            download_cmd = f'wget -O {folder_name}/{tool_name} {profile_url}'
+            download_cmd = f'wget --no-check-certificate -O {folder_name}/{tool_name} {profile_url}'
             
         status, out, err = run_remote_cmd(download_cmd)
         if status != 0:
-            raise RuntimeError(f"Failed to download tool on {os_name}:\n{err}")
+            print(f"[ERROR] Failed to download tool on {os_name} (Status {status}):\n{err}")
+            print(f"[INFO] Skipping {os_name} due to download failure.")
+            return
             
         if os_name != "windows":
             run_remote_cmd(f"chmod +x {folder_name}/{tool_name}")
