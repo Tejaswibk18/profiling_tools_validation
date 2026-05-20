@@ -20,29 +20,43 @@ def generate_html_report(module_key):
         validation_details = []
 
         if base_outputs_path.exists():
-            for os_dir in base_outputs_path.iterdir():
-                if os_dir.is_dir():
-                    env_name = os_dir.name.upper()
-                    env_stats[env_name] = {"passed": 0, "failed": 0}
-                    
-                    for mode in ["with_sudo", "without_sudo"]:
-                        results_path = os_dir / mode / "validation_results.txt"
-                        if results_path.exists():
-                            with open(results_path, "r", encoding="utf-8") as f:
-                                lines = f.readlines()
-                                for line in lines:
-                                    line = line.strip()
-                                    if not line: continue
-                                    
-                                    validation_details.append({"env": env_name, "mode": mode, "text": line})
-                                    
-                                    if line.startswith("[PASS]"):
-                                        env_stats[env_name]["passed"] += 1
-                                        global_passed += 1
-                                    elif line.startswith("[FAIL]") or line.startswith("[ERROR]"):
-                                        env_stats[env_name]["failed"] += 1
-                                        global_failed += 1
-                                        failure_reasons.append(f"[{env_name}][{mode}] {line}")
+            for results_path in base_outputs_path.glob("**/validation_results.txt"):
+                try:
+                    rel_parts = results_path.relative_to(base_outputs_path).parts
+                    if len(rel_parts) >= 3:
+                        os_type = rel_parts[0].upper()
+                        mode = rel_parts[1]
+                        server_name = rel_parts[2]
+                        env_name = f"{os_type} ({server_name})"
+                    elif len(rel_parts) == 2:
+                        os_type = rel_parts[0].upper()
+                        mode = rel_parts[1]
+                        env_name = os_type
+                    else:
+                        env_name = "UNKNOWN"
+                        mode = "unknown"
+                        
+                    if env_name not in env_stats:
+                        env_stats[env_name] = {"passed": 0, "failed": 0}
+                        
+                    with open(results_path, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            
+                            validation_details.append({"env": env_name, "mode": mode, "text": line})
+                            
+                            if line.startswith("[PASS]"):
+                                env_stats[env_name]["passed"] += 1
+                                global_passed += 1
+                            elif line.startswith("[FAIL]") or line.startswith("[ERROR]"):
+                                env_stats[env_name]["failed"] += 1
+                                global_failed += 1
+                                failure_reasons.append(f"[{env_name}][{mode}] {line}")
+                except Exception as ex:
+                    print(f"[WARN] Failed to process validation results at {results_path}: {ex}")
         else:
             failure_reasons.append(f"Base outputs directory not found at {base_outputs_path}")
 

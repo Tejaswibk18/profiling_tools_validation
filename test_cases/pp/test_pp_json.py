@@ -3,6 +3,11 @@ import unittest
 class TestPlatformProfilerJson(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Allow dynamic injection of actual server JSON data for report generation
+        if getattr(cls, "_use_real_data", False):
+            cls.summary = cls.sample_data.get("Summary", {})
+            return
+
         # Sample data simulating platformprofiler.json
         cls.sample_data = {
             "Summary": {
