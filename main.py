@@ -217,7 +217,7 @@ def main():
             print_short_help()
             return
 
-        # 1. Prompts for keys if PP is involved (pp or all modules)
+        # 1. Prompts for keys if PP is involved 
         keys_to_check = []
         if args.pp or args.all:
             keys_input = input("\nEnter key(s) to check in JSON (e.g. [Summary.Server.Model], comma separated if multiple): ")
