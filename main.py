@@ -216,6 +216,16 @@ def main():
             print_short_help()
             return
 
+        # Clean up existing outputs for targeted modules to prevent leftover files/folders from old structures
+        for module_key, module_name in modules_to_run:
+            module_output_dir = Path("outputs") / module_key
+            if module_output_dir.exists():
+                print(f"[INFO] Cleaning up previous outputs folder for {module_name} to guarantee a clean run...")
+                try:
+                    shutil.rmtree(module_output_dir)
+                except Exception as e:
+                    print(f"[WARN] Failed to delete old outputs directory {module_output_dir}: {e}")
+
         # 1. Prompts for keys if PP is involved 
         keys_to_check = []
         if args.pp or args.all:
