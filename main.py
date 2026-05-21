@@ -318,7 +318,7 @@ def main():
                     
                 local_dir = Path(root)
                 parts = local_dir.relative_to(pp_outputs_dir).parts
-                if len(parts) < 3: # Ensure we are inside os/mode/server folder
+                if len(parts) < 2: # Ensure we are inside os/mode folder
                     continue
                 
                 json_file = None
@@ -394,7 +394,7 @@ def main():
                     
                 local_dir = Path(root)
                 parts = local_dir.relative_to(wp_outputs_dir).parts
-                if len(parts) < 3: # Ensure we are inside os/mode/server folder
+                if len(parts) < 2: # Ensure we are inside os/mode folder
                     continue
                 
                 print(f"[INFO] Running WP output validations on: {local_dir}")

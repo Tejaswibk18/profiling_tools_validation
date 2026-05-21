@@ -4,7 +4,7 @@ from pathlib import Path
 def create_output_folders(module_key, os_type, server_name):
     """
     Creates local output folders according to the required structure:
-    outputs/<module_key>/<os_type>/<mode>/<server_name>
+    outputs/<module_key>/<os_type>/<mode>
     
     Modes:
       - Linux/Arm: 'sudo' and 'nonsudo'
@@ -14,13 +14,13 @@ def create_output_folders(module_key, os_type, server_name):
     
     if os_type == "windows":
         paths = {
-            "sudo": Path("outputs") / module_key / os_type / "administrator" / server_name,
-            "non_sudo": Path("outputs") / module_key / os_type / "normal user" / server_name
+            "sudo": Path("outputs") / module_key / os_type / "administrator",
+            "non_sudo": Path("outputs") / module_key / os_type / "normal user"
         }
     else:
         paths = {
-            "sudo": Path("outputs") / module_key / os_type / "sudo" / server_name,
-            "non_sudo": Path("outputs") / module_key / os_type / "nonsudo" / server_name
+            "sudo": Path("outputs") / module_key / os_type / "sudo",
+            "non_sudo": Path("outputs") / module_key / os_type / "nonsudo"
         }
 
     for path in paths.values():

@@ -23,14 +23,15 @@ def generate_html_report(module_key):
             for results_path in base_outputs_path.glob("**/validation_results.txt"):
                 try:
                     rel_parts = results_path.relative_to(base_outputs_path).parts
-                    if len(rel_parts) >= 3:
-                        os_type = rel_parts[0].upper()
-                        mode = rel_parts[1]
-                        server_name = rel_parts[2]
+                    dir_parts = rel_parts[:-1]
+                    if len(dir_parts) >= 3:
+                        os_type = dir_parts[0].upper()
+                        mode = dir_parts[1]
+                        server_name = dir_parts[2]
                         env_name = f"{os_type} ({server_name})"
-                    elif len(rel_parts) == 2:
-                        os_type = rel_parts[0].upper()
-                        mode = rel_parts[1]
+                    elif len(dir_parts) == 2:
+                        os_type = dir_parts[0].upper()
+                        mode = dir_parts[1]
                         env_name = os_type
                     else:
                         env_name = "UNKNOWN"
