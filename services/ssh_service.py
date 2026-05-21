@@ -239,7 +239,10 @@ def run_windows_profiler(ssh, module_key, os_type, server_section_name, output_p
         tool_name = "pp" if module_key == "pp" else "wp"
         
         # Download tool
-        download_cmd = f'powershell -Command "Invoke-WebRequest -Uri {profile_url} -OutFile {full_folder_path}\\{tool_name}.exe"'
+        download_cmd = (
+            f'cmd /c "curl.exe -k -L {profile_url} '
+            f'-o {full_folder_path}\\{tool_name}.exe"'
+        )
         status, out, err = run_remote_cmd(download_cmd)
         if status != 0:
             print(f"[ERROR] Failed to download tool on {server_section_name} ({os_type}) for {mode} (Status {status}):\n{err}")
