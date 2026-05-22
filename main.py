@@ -13,11 +13,23 @@ from services.ssh_service import connect_to_server, get_os_type, load_server_det
 from services.config_service import load_config
 from services.report_service import generate_html_report
 
+
 MODULES = {
     "-pp": "Platform Profiler",
     "-wp": "Workload Profiler",
     "-a": "Complete Execution"
 }
+
+
+def _test_to_description(test_name):
+    """
+    Converts a test method name into a human-readable description for PASS log lines.
+    e.g. test_server_model -> 'Server Model'
+    """
+    parts = test_name.split('_')
+    if parts and parts[0] == 'test':
+        parts = parts[1:]
+    return ' '.join(p.capitalize() for p in parts)
 
 
 class ProfilerTestResult(unittest.TestResult):
@@ -374,7 +386,8 @@ def main():
                         
                         validation_lines = []
                         for test_name in test_result.passed_tests:
-                            validation_lines.append(f"[PASS] {test_name}")
+                            desc = _test_to_description(test_name)
+                            validation_lines.append(f"[PASS] {test_name} : {desc} — OK")
                         for test_name, error_msg in test_result.failed_tests:
                             validation_lines.append(f"[FAIL] {test_name} : {error_msg}")
                             
@@ -422,7 +435,8 @@ def main():
                 
                 validation_lines = []
                 for test_name in test_result.passed_tests:
-                    validation_lines.append(f"[PASS] {test_name}")
+                    desc = _test_to_description(test_name)
+                    validation_lines.append(f"[PASS] {test_name} : {desc} — OK")
                 for test_name, error_msg in test_result.failed_tests:
                     validation_lines.append(f"[FAIL] {test_name} : {error_msg}")
                     

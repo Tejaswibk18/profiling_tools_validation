@@ -1,5 +1,6 @@
 import paramiko
 import configparser
+from pathlib import Path
 
 from services.config_service import load_config
 from services.logger_service import log_error
@@ -293,6 +294,20 @@ def run_windows_profiler(ssh, module_key, os_type, server_section_name, output_p
         run_remote_cmd(f'powershell -Command "Remove-Item -Force {zip_file}"')
 
 
+def _write_connection_error(module_key, os_type, message):
+    """
+    Writes a connection_error.txt into the outputs/<module_key>/<os_type>/ directory
+    so the report generator can display failed environments even when no profiling ran.
+    """
+    try:
+        error_dir = Path("outputs") / module_key / os_type.lower()
+        error_dir.mkdir(parents=True, exist_ok=True)
+        with open(error_dir / "connection_error.txt", "w", encoding="utf-8") as f:
+            f.write(message)
+    except Exception:
+        pass
+
+
 def connect_to_server(keys, module_key, server_section_name, duration=None, interval=None, tag=None):
     server = load_server_details(server_section_name)
     os_type = get_os_type(server_section_name, server)
@@ -329,11 +344,13 @@ def connect_to_server(keys, module_key, server_section_name, duration=None, inte
         message = f"Authentication Failed for {server_section_name}"
         print(f"\n[ERROR] {message}")
         log_error(message)
+        _write_connection_error(module_key, os_type, message)
 
     except paramiko.SSHException as error:
         message = f"SSH Error for {server_section_name}: {error}"
         print(f"\n[ERROR] {message}")
         log_error(message)
+        _write_connection_error(module_key, os_type, message)
 
     except ValueError as error:
         message = f"Config Error for {server_section_name}: {error}"
@@ -344,6 +361,7 @@ def connect_to_server(keys, module_key, server_section_name, duration=None, inte
         message = f"Error for {server_section_name}: {error}"
         print(f"\n[ERROR] {message}")
         log_error(message)
+        _write_connection_error(module_key, os_type, message)
 
     finally:
         ssh.close()
