@@ -117,102 +117,7 @@ def get_remote_hostname(ssh, default_name):
     return default_name
 
 
-def run_linux_profiler(ssh, module_key, os_type, server_section_name, output_paths, duration=None, interval=None, tag=None):
-    def run_remote_cmd(cmd):
-        stdin, stdout, stderr = ssh.exec_command(cmd)
-        exit_status = stdout.channel.recv_exit_status()
-        out = stdout.read().decode()   
-        err = stderr.read().decode()
-        return exit_status, out, err
-
-    hostname = get_remote_hostname(ssh, server_section_name)
-    import datetime
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    base_remote_dir = "profiling_tools_validation"
-    run_remote_cmd(f"mkdir -p {base_remote_dir}/{module_key}")
-
-    for mode in ["non_sudo", "sudo"]:
-        mode_key = "non_sudo" if mode == "non_sudo" else "sudo"
-        mode_suffix = "nonsudo" if mode == "non_sudo" else "sudo"
-        
-        prefix = "platform_profiler" if module_key == "pp" else "workload_profiler"
-        folder_name = f"{prefix}_{hostname}_{timestamp}_{mode_suffix}"
-        full_folder_path = f"{base_remote_dir}/{module_key}/{folder_name}"
-
-        # Create folder
-        status, out, err = run_remote_cmd(f"mkdir -p {full_folder_path}")
-        if status != 0:
-            print(f"[ERROR] Failed to create directory on {server_section_name} ({os_type}) for {mode}: {err}")
-            continue
-            
-        profile_url = get_profile_url(module_key, os_type)
-        tool_name = "pp" if module_key == "pp" else "wp"
-        
-        # Download tool
-        download_cmd = f'wget --no-check-certificate -O {full_folder_path}/{tool_name} {profile_url}'
-        status, out, err = run_remote_cmd(download_cmd)
-        if status != 0:
-            print(f"[ERROR] Failed to download tool on {server_section_name} ({os_type}) for {mode} (Status {status}):\n{err}")
-            run_remote_cmd(f"rm -rf {full_folder_path}")
-            continue
-            
-        # Make executable
-        run_remote_cmd(f"chmod +x {full_folder_path}/{tool_name}")
-        
-        server = load_server_details(server_section_name)
-        password = server.get("password", "")
-
-        if mode == "sudo":
-            sudo_prefix = f"echo '{password}' | sudo -S "
-        else:
-            sudo_prefix = ""
-        
-        # Run tool
-        if module_key == "pp":
-            run_cmd = f"{sudo_prefix}./{full_folder_path}/{tool_name} --osip localhost > {full_folder_path}/results.txt"
-        else:
-            d_val = duration if duration else "60"
-            i_val = interval if interval else "5"
-            t_val = tag if tag else "default_tag"
-            run_cmd = f"{sudo_prefix}./{full_folder_path}/{tool_name} -w -d {d_val} -i {i_val} -t {t_val} > {full_folder_path}/results.txt"
-            
-        status, out, err = run_remote_cmd(run_cmd)
-        if status != 0:
-            print(f"[ERROR] Failed to run tool on {server_section_name} ({os_type}) for {mode} (Status {status}):\n{err}")
-            run_remote_cmd(f"{sudo_prefix}rm -rf {full_folder_path}")
-            continue
-            
-        # Delete the binary to save transfer size and keep the folder clean
-        run_remote_cmd(f"{sudo_prefix}rm -f {full_folder_path}/{tool_name}")
-            
-        # Zip folder
-        zip_file = f"{full_folder_path}.zip"
-        zip_cmd = f"cd {base_remote_dir}/{module_key} && {sudo_prefix}zip -r {folder_name}.zip {folder_name}"
-        
-        status, out, err = run_remote_cmd(zip_cmd)
-        if status != 0:
-            print(f"[ERROR] Failed to zip results on {server_section_name} ({os_type}) for {mode} (Status {status}):\n{err}")
-            run_remote_cmd(f"{sudo_prefix}rm -rf {full_folder_path}")
-            continue
-            
-        if mode == "sudo":
-            run_remote_cmd(f"sudo chmod 644 {zip_file}")
-            
-        try:
-            sftp = ssh.open_sftp()
-            local_dir = output_paths[mode_key]
-            local_zip_path = local_dir / f"{folder_name}.zip"
-            sftp.get(zip_file, str(local_zip_path))
-            sftp.close()
-            print(f"[INFO] Successfully brought data back to local for {mode} ({server_section_name.upper()}): {local_zip_path}")
-        except Exception as sftp_err:
-            print(f"[ERROR] SFTP transfer failed for {mode} ({server_section_name.upper()}): {sftp_err}")
-            
-        run_remote_cmd(f"sudo rm -rf {full_folder_path} && sudo rm -f {zip_file}")
-
-
-def run_windows_profiler(
+def run_linux_profiler(
     ssh,
     module_key,
     os_type,
@@ -225,8 +130,10 @@ def run_windows_profiler(
     def run_remote_cmd(cmd):
         stdin, stdout, stderr = ssh.exec_command(cmd)
         exit_status = stdout.channel.recv_exit_status()
+
         out = stdout.read().decode(errors="ignore")
         err = stderr.read().decode(errors="ignore")
+
         return exit_status, out, err
 
     hostname = get_remote_hostname(ssh, server_section_name)
@@ -236,16 +143,204 @@ def run_windows_profiler(
 
     base_remote_dir = "profiling_tools_validation"
 
-    # Create base directory
+    run_remote_cmd(f"mkdir -p {base_remote_dir}/{module_key}")
+
+    server = load_server_details(server_section_name)
+    password = server.get("password", "")
+
+    for mode in ["non_sudo", "sudo"]:
+
+        mode_key = mode
+        mode_suffix = "nonsudo" if mode == "non_sudo" else "sudo"
+
+        prefix = (
+            "platform_profiler"
+            if module_key == "pp"
+            else "workload_profiler"
+        )
+
+        folder_name = (
+            f"{prefix}_{hostname}_{timestamp}_{mode_suffix}"
+        )
+
+        full_folder_path = (
+            f"{base_remote_dir}/{module_key}/{folder_name}"
+        )
+
+        tool_name = (
+            "pp"
+            if module_key == "pp"
+            else "wp"
+        )
+
+        profile_url = get_profile_url(module_key, os_type)
+
+        sudo_prefix = ""
+
+        if mode == "sudo":
+            sudo_prefix = f"echo '{password}' | sudo -S "
+
+        # Create folder
+        status, out, err = run_remote_cmd(
+            f"mkdir -p {full_folder_path}"
+        )
+
+        if status != 0:
+            print(f"[ERROR] Folder creation failed: {err}")
+            continue
+
+        # Download binary
+        download_cmd = (
+            f"wget --no-check-certificate "
+            f"-O {full_folder_path}/{tool_name} "
+            f"{profile_url}"
+        )
+
+        status, out, err = run_remote_cmd(download_cmd)
+
+        if status != 0:
+            print(f"[ERROR] Download failed:\n{err}")
+            continue
+
+        run_remote_cmd(
+            f"chmod +x {full_folder_path}/{tool_name}"
+        )
+
+        # IMPORTANT FIX
+        if module_key == "pp":
+
+            run_cmd = f"""
+            cd {base_remote_dir}/{module_key} &&
+            {sudo_prefix}./{folder_name}/{tool_name} \
+            --osip localhost \
+            --output {folder_name} \
+            > {folder_name}/results.txt 2>&1
+            """
+
+        else:
+
+            d_val = duration or "60"
+            i_val = interval or "5"
+            t_val = tag or "default_tag"
+
+            run_cmd = f"""
+            cd {base_remote_dir}/{module_key} &&
+            {sudo_prefix}./{folder_name}/{tool_name} \
+            -w \
+            -d {d_val} \
+            -i {i_val} \
+            -t {t_val} \
+            --output {folder_name} \
+            > {folder_name}/results.txt 2>&1
+            """
+
+        status, out, err = run_remote_cmd(run_cmd)
+
+        if status != 0:
+            print(f"[ERROR] Execution failed:\n{err}")
+            continue
+
+        # Remove binary
+        run_remote_cmd(
+            f"{sudo_prefix}rm -f {full_folder_path}/{tool_name}"
+        )
+
+        # Zip
+        zip_file = f"{full_folder_path}.zip"
+
+        zip_cmd = f"""
+        cd {base_remote_dir}/{module_key} &&
+        {sudo_prefix}zip -r {folder_name}.zip {folder_name}
+        """
+
+        status, out, err = run_remote_cmd(zip_cmd)
+
+        if status != 0:
+            print(f"[ERROR] Zip failed:\n{err}")
+            continue
+
+        if mode == "sudo":
+            run_remote_cmd(
+                f"{sudo_prefix}chmod 644 {zip_file}"
+            )
+
+        # Transfer
+        try:
+            sftp = ssh.open_sftp()
+
+            local_dir = output_paths[mode_key]
+
+            local_zip_path = (
+                local_dir / f"{folder_name}.zip"
+            )
+
+            sftp.get(zip_file, str(local_zip_path))
+
+            sftp.close()
+
+            print(
+                f"[INFO] Downloaded: {local_zip_path}"
+            )
+
+        except Exception as sftp_err:
+            print(f"[ERROR] SFTP failed: {sftp_err}")
+
+        # Cleanup
+        run_remote_cmd(
+            f"{sudo_prefix}rm -rf {full_folder_path}"
+        )
+
+        run_remote_cmd(
+            f"{sudo_prefix}rm -f {zip_file}"
+        )
+
+
+def run_windows_profiler(
+    ssh,
+    module_key,
+    os_type,
+    server_section_name,
+    output_paths,
+    duration=None,
+    interval=None,
+    tag=None
+):
+
+    def run_remote_cmd(cmd):
+
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+
+        exit_status = stdout.channel.recv_exit_status()
+
+        out = stdout.read().decode(errors="ignore")
+        err = stderr.read().decode(errors="ignore")
+
+        return exit_status, out, err
+
+    hostname = get_remote_hostname(
+        ssh,
+        server_section_name
+    )
+
+    import datetime
+
+    timestamp = datetime.datetime.now().strftime(
+        "%Y%m%d_%H%M%S"
+    )
+
+    base_remote_dir = "profiling_tools_validation"
+
     run_remote_cmd(
-        f'powershell -Command '
-        f'"New-Item -ItemType Directory -Force '
-        f'-Path \'{base_remote_dir}\\{module_key}\'"'
+        f'powershell -Command "'
+        f'New-Item -ItemType Directory '
+        f'-Force -Path {base_remote_dir}\\{module_key}'
+        f'"'
     )
 
     for mode in ["non_sudo", "sudo"]:
 
-        mode_key = "non_sudo" if mode == "non_sudo" else "sudo"
+        mode_key = mode
+
         mode_suffix = (
             "normal_user"
             if mode == "non_sudo"
@@ -266,171 +361,115 @@ def run_windows_profiler(
             f"{base_remote_dir}\\{module_key}\\{folder_name}"
         )
 
-        # Create working directory
-        create_cmd = (
-            f'powershell -Command '
-            f'"New-Item -ItemType Directory -Force '
-            f'-Path \'{full_folder_path}\'"'
-        )
-
-        status, out, err = run_remote_cmd(create_cmd)
-
-        if status != 0:
-            print(
-                f"[ERROR] Failed to create directory "
-                f"on {server_section_name} ({os_type}) "
-                f"for {mode}: {err}"
-            )
-            continue
-
-        profile_url = get_profile_url(module_key, os_type)
-
         tool_name = (
             "pp"
             if module_key == "pp"
             else "wp"
         )
 
-        remote_exe = (
-            f"{full_folder_path}\\{tool_name}.exe"
+        profile_url = get_profile_url(
+            module_key,
+            os_type
         )
 
-        # Download using curl
-        download_cmd = (
-            f'cmd /c "curl.exe -k -L '
-            f'"{profile_url}" '
-            f'-o "{remote_exe}""'
+        # Create folder
+        create_cmd = (
+            f'powershell -Command "'
+            f'New-Item -ItemType Directory '
+            f'-Force '
+            f'-Path \'{full_folder_path}\''
+            f'"'
         )
+
+        status, out, err = run_remote_cmd(create_cmd)
+
+        if status != 0:
+            print(f"[ERROR] Folder creation failed:\n{err}")
+            continue
+
+        # Download
+        download_cmd = f'''
+        powershell -Command "
+        [Net.ServicePointManager]::SecurityProtocol =
+        [Net.SecurityProtocolType]::Tls12;
+
+        Invoke-WebRequest
+        -Uri '{profile_url}'
+        -OutFile '{full_folder_path}\\{tool_name}.exe'
+        "
+        '''
 
         status, out, err = run_remote_cmd(download_cmd)
 
         if status != 0:
-            print(
-                f"[ERROR] Failed to download tool "
-                f"on {server_section_name} ({os_type}) "
-                f"for {mode} (Status {status}):\n"
-                f"STDOUT:\n{out}\nSTDERR:\n{err}"
-            )
-
-            run_remote_cmd(
-                f'powershell -Command '
-                f'"Remove-Item -Recurse -Force '
-                f'\'{full_folder_path}\'"'
-            )
-
+            print(f"[ERROR] Download failed:\n{err}")
             continue
 
-        # Validate exe exists
-        check_cmd = (
-            f'powershell -Command '
-            f'"Test-Path \'{remote_exe}\'"'
-        )
-
-        _, out, _ = run_remote_cmd(check_cmd)
-
-        if "True" not in out:
-            print(
-                f"[ERROR] Downloaded executable not found "
-                f"for {mode}"
-            )
-            continue
-
-        results_file = (
-            f"{full_folder_path}\\results.txt"
-        )
-
-        # Build arguments
+        # IMPORTANT FIX
         if module_key == "pp":
-            arguments = (
+
+            args = (
                 f'--osip localhost '
-                f'--output "{full_folder_path}"'
+                f'--output "{folder_name}"'
             )
-        else:
-            d_val = duration if duration else "60"
-            i_val = interval if interval else "5"
-            t_val = tag if tag else "default_tag"
 
-            arguments = (
-                f'-w -d {d_val} '
+        else:
+
+            d_val = duration or "60"
+            i_val = interval or "5"
+            t_val = tag or "default_tag"
+
+            args = (
+                f'-w '
+                f'-d {d_val} '
                 f'-i {i_val} '
-                f'-t {t_val}'
+                f'-t {t_val} '
+                f'--output "{folder_name}"'
             )
 
-        # NON-SUDO
-        if mode == "non_sudo":
+        # Execute
+        run_cmd = f'''
+        powershell -Command "
+        cd '{base_remote_dir}\\{module_key}';
 
-            run_cmd = (
-                f'powershell -Command '
-                f'"& \'{remote_exe}\' '
-                f'{arguments} '
-                f'> \'{results_file}\' 2>&1"'
-            )
-
-        # SUDO / ADMIN MODE
-        else:
-
-            # IMPORTANT:
-            # Cannot use RedirectStandardOutput with RunAs
-            # So output goes directly to profiler output folder
-
-            run_cmd = (
-                f'powershell -Command '
-                f'"Start-Process '
-                f'-FilePath \'{remote_exe}\' '
-                f'-ArgumentList \'{arguments}\' '
-                f'-Verb RunAs '
-                f'-Wait"'
-            )
+        .\\{folder_name}\\{tool_name}.exe {args}
+        *> .\\{folder_name}\\results.txt
+        "
+        '''
 
         status, out, err = run_remote_cmd(run_cmd)
 
         if status != 0:
-            print(
-                f"[ERROR] Failed to run tool "
-                f"on {server_section_name} ({os_type}) "
-                f"for {mode} (Status {status}):\n"
-                f"STDOUT:\n{out}\nSTDERR:\n{err}"
-            )
-
-            run_remote_cmd(
-                f'powershell -Command '
-                f'"Remove-Item -Recurse -Force '
-                f'\'{full_folder_path}\'"'
-            )
-
+            print(f"[ERROR] Execution failed:\n{err}")
             continue
 
-        # Remove executable
+        # Remove exe
         run_remote_cmd(
-            f'powershell -Command '
-            f'"Remove-Item -Force '
-            f'\'{remote_exe}\'"'
+            f'powershell -Command "'
+            f'Remove-Item -Force '
+            f'\'{full_folder_path}\\{tool_name}.exe\''
+            f'"'
         )
 
-        # Zip results
+        # Zip
         zip_file = f"{full_folder_path}.zip"
 
-        zip_cmd = (
-            f'powershell -Command '
-            f'"Compress-Archive '
-            f'-Path \'{full_folder_path}\' '
-            f'-DestinationPath \'{zip_file}\' '
-            f'-Force"'
-        )
+        zip_cmd = f'''
+        powershell -Command "
+        Compress-Archive
+        -Path '{full_folder_path}'
+        -DestinationPath '{zip_file}'
+        -Force
+        "
+        '''
 
         status, out, err = run_remote_cmd(zip_cmd)
 
         if status != 0:
-            print(
-                f"[ERROR] Failed to zip results "
-                f"on {server_section_name} ({os_type}) "
-                f"for {mode} (Status {status}):\n"
-                f"STDOUT:\n{out}\nSTDERR:\n{err}"
-            )
-
+            print(f"[ERROR] Zip failed:\n{err}")
             continue
 
-        # Transfer zip
+        # Transfer
         try:
 
             sftp = ssh.open_sftp()
@@ -441,37 +480,34 @@ def run_windows_profiler(
                 local_dir / f"{folder_name}.zip"
             )
 
-            sftp.get(zip_file, str(local_zip_path))
+            sftp.get(
+                zip_file,
+                str(local_zip_path)
+            )
 
             sftp.close()
 
             print(
-                f"[INFO] Successfully brought "
-                f"data back to local for {mode} "
-                f"({server_section_name.upper()}): "
-                f"{local_zip_path}"
+                f"[INFO] Downloaded: {local_zip_path}"
             )
 
         except Exception as sftp_err:
 
-            print(
-                f"[ERROR] SFTP transfer failed "
-                f"for {mode} "
-                f"({server_section_name.upper()}): "
-                f"{sftp_err}"
-            )
+            print(f"[ERROR] SFTP failed: {sftp_err}")
 
         # Cleanup
         run_remote_cmd(
-            f'powershell -Command '
-            f'"Remove-Item -Recurse -Force '
-            f'\'{full_folder_path}\'"'
+            f'powershell -Command "'
+            f'Remove-Item -Recurse -Force '
+            f'\'{full_folder_path}\''
+            f'"'
         )
 
         run_remote_cmd(
-            f'powershell -Command '
-            f'"Remove-Item -Force '
-            f'\'{zip_file}\'"'
+            f'powershell -Command "'
+            f'Remove-Item -Force '
+            f'\'{zip_file}\''
+            f'"'
         )
 
 
@@ -508,7 +544,27 @@ def connect_to_server(keys, module_key, server_section_name, duration=None, inte
         elif server.get("password"):
             connect_args["password"] = server["password"]
 
-        ssh.connect(**connect_args)
+        try:
+            ssh.connect(**connect_args)
+        except paramiko.ssh_exception.BadAuthenticationType as e:
+            if "keyboard-interactive" in e.allowed_types and server.get("password"):
+                print(f"[INFO] Password authentication rejected. Attempting keyboard-interactive fallback for {server_section_name}...")
+                transport = ssh.get_transport()
+                if transport:
+                    try:
+                        transport.auth_interactive_dumb(
+                            server["username"],
+                            handler=lambda title, instructions, prompt_list: [server["password"]]
+                        )
+                        print(f"[INFO] Keyboard-interactive authentication successful for {server_section_name}!")
+                    except Exception as interactive_err:
+                        raise paramiko.AuthenticationException(
+                            f"Keyboard-interactive fallback failed: {interactive_err}"
+                        ) from e
+                else:
+                    raise e
+            else:
+                raise e
 
         print(
             f"\n[INFO] SSH Connection Successful to {server_section_name.upper()} ({os_type.upper()})"
